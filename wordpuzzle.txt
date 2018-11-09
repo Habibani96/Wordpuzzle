@@ -1,0 +1,914 @@
+.386
+.model flat, stdcall
+.stack 1024
+GetTickCount PROTO      ; get elapsed milliseconds
+                        ; since computer turned on
+ExitProcess PROTO,          ; exit program
+    dwExitCode:DWORD        ; return code
+GetStdHandle PROTO,         ; get standard handle
+    nStdHandle:DWORD        ; type of console handle
+CloseHandle PROTO,      ; close file handle
+    handle:DWORD
+GetTickCount PROTO      ; get elapsed milliseconds since computer turned on
+ReadConsoleA PROTO,
+    handle:DWORD,                     ; input handle
+    lpBuffer:PTR BYTE,                ; pointer to buffer
+    nNumberOfCharsToRead:DWORD,       ; number of chars to read
+    lpNumberOfCharsRead:PTR DWORD,    ; number of chars read
+    lpReserved:PTR DWORD              ; 0 (not used - reserved)
+WriteConsoleA PROTO,                   ; write a buffer to the console
+    handle:DWORD,                     ; output handle
+    lpBuffer:PTR BYTE,                ; pointer to buffer
+    nNumberOfCharsToWrite:DWORD,      ; size of buffer
+    lpNumberOfCharsWritten:PTR DWORD, ; number of chars written
+    lpReserved:PTR DWORD              ; 0 (not used)
+CreateFileA PROTO,           ; create new file
+    pFilename:PTR BYTE,     ; ptr to filename
+    accessMode:DWORD,       ; access mode
+    shareMode:DWORD,        ; share mode
+    lpSecurity:DWORD,       ; can be NULL
+    howToCreate:DWORD,      ; how to create the file
+    attributes:DWORD,       ; file attributes
+    htemplate:DWORD         ; handle to template file
+ReadFile PROTO,           ; read buffer from input file
+    fileHandle:DWORD,     ; handle to file
+    pBuffer:PTR BYTE,     ; ptr to buffer
+    nBufsize:DWORD,       ; number bytes to read
+    pBytesRead:PTR DWORD, ; bytes actually read
+    pOverlapped:PTR DWORD ; ptr to asynchronous info
+
+GetTimeFormatA PROTO :DWORD,:DWORD,:DWORD,:DWORD,:DWORD,:DWORD 
+
+SetConsoleTextAttribute PROTO,
+    nStdHandle:DWORD,   ; console output handle
+    nColor:DWORD        ; color attribute
+
+SetConsoleCursorPosition PROTO, 
+	handle:DWORD,  
+    pos:DWORD       
+.data
+
+words = 200								; number of words
+
+filepath byte "E:\words.txt", 0			; specify file path. file format must be one word per line
+
+directionmsg byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,"Possible Directions:",13,10
+byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,"       0", 13,10
+byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,"       |", 13, 10
+byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,"       |", 13, 10
+byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,"5 ---- o ---- 1", 13, 10
+byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h, "     / | \", 13, 10
+byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h, "    /  |  \", 13,10
+byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h, "   4   3   2", 13,10,0
+directions = 6
+gridsize = 15
+puzzlewords = 8
+minwordlength = 6
+maxwordlength = 10
+puzzletitle byte 20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,"|---------Welcome to the Puzzle World---------|", 13, 10, 0
+puzzlewordmsg byte "Words to be found:",20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,20h,"Score: ",0
+wordnotfoundmsg byte "Word not found at specified position and direction", 13, 10, 0
+wordfoundmsg byte "Word found at specified position and direction", 13, 10, 0
+puzzlegrid byte gridsize*gridsize dup(0) 
+puzzlegridforeground byte gridsize*gridsize dup(7) 
+puzzlegridbackground byte gridsize*gridsize dup(0) 
+wordvocabulary byte words*10 dup(0)
+buffer byte words*(maxwordlength+2) dup(0)
+timeFormat byte "hh:mm:ss tt", 0 ; you can change this to whatever format you need
+timestartmsg byte "You have 10 minutes to complete this puzzle. Your time started at: ", 0
+timeoutmsg byte "Time out. You took more than 10 minutes", 0
+foundsuccess byte "All the words have successfully been found. Well done.", 0
+sysTime byte 20 DUP (?)
+puzzwordfound byte puzzlewords DUP(0)
+inputhandle dword ?
+outputhandle dword ?
+filehandle dword ?
+dummy dword ?
+bytesread dword ?
+wordscount dword 0
+seed dword ?
+space byte 20h, 20h, 0
+spaces byte 100 dup(20h)
+scorestr byte 6 dup(0)
+byte 0
+backspaces byte 100 dup(8)
+byte 0
+newline byte 0dh, 0ah, 0
+selectedwordindex dword puzzlewords dup(-1)
+wordgridrowpos dword puzzlewords dup(?)
+wordgridcolpos dword puzzlewords dup(?)
+worddirection dword puzzlewords dup(?)		; N:0, E:1, SE:2, S:3, SW:4, W:5
+temp byte maxwordlength dup(0)
+starttime dword ?
+endtime dword ?
+countsuccess dword ?
+inputword byte 2*maxwordlength dup(0)
+score dword 0
+puzzword byte maxwordlength+1 dup(0)
+inputmessage byte 13, 10, "Please enter the word, row no and column no, and direction no (e.g. dummyword 1 2 0):  ", 0
+.code
+main proc
+
+;---------Getting handles
+
+	invoke GetStdHandle, -10
+	mov inputhandle, eax
+
+	invoke GetStdHandle, -11
+	mov outputhandle, eax
+
+	invoke CreateFileA, offset filepath,1,1,0,3,128,0
+	mov filehandle,eax
+
+;---------Initializing seed for random number generation
+
+	invoke GetTickCount 
+	mov seed, eax
+
+;---------Reading file
+
+	invoke ReadFile, filehandle, offset buffer, lengthof buffer, offset bytesread, 0 
+	invoke CloseHandle, filehandle
+
+;---------Extracting words 
+
+	mov esi, offset buffer
+	mov edi, offset wordvocabulary
+	mov ebx, edi
+	mov ecx, 0
+	extractWords:
+		cmp byte ptr [esi], 0h
+		je endextractWords
+		cmp ecx, lengthof buffer
+		jae endextractWords
+		cmp byte ptr [esi], 0dh
+		je extractnext
+		mov dl, [esi]
+		and dl, 11011111b
+		mov [ebx], dl
+		inc esi
+		inc ebx
+		inc ecx
+		jmp extractWords
+		extractnext:
+			add edi, maxwordlength
+			mov ebx, edi
+			add esi, 2
+			add ecx, 2
+			jmp extractWords
+	endextractWords:
+
+;---------Placing words randomly in the puzzle. Words and directions both are selected randomly
+	mov ecx, puzzlewords
+	placeWord:
+		finduniqueword:
+			mov eax, words
+			call generateRandom
+			mov ebx, 0
+			checkuniqueness:
+				cmp ebx, puzzlewords
+				jae itsunique
+				cmp selectedwordindex[ebx*4], eax
+				je finduniqueword
+				inc ebx
+				jmp checkuniqueness
+			itsunique:
+			mov selectedwordindex[ecx*4-4], eax
+			mov eax, directions
+			call generateRandom
+			mov worddirection[ecx*4-4], eax
+			cmp eax, 0
+			je placeNorth
+			cmp eax, 1
+			je placeEast
+			cmp eax, 2
+			je placeSouthEast
+			cmp eax, 3
+			je placeSouth
+			cmp eax, 4
+			je placeSouthWest
+			placeWest:
+				mov eax, gridsize		
+				call generaterandom
+				mov ebx, eax			; row no
+				mov wordgridrowpos[ecx*4-4], ebx
+				mov eax, gridsize		
+				call generaterandom
+				mov edx, eax			; col no
+				mov wordgridcolpos[ecx*4-4], edx
+				cmp edx, minwordlength-1
+				jb placeWest
+				mov eax, ebx
+				mov ah, gridsize
+				mul ah
+				movzx edi, ax
+				add edi, edx
+				mov eax, selectedwordindex[ecx*4-4]
+				mov esi, maxwordlength
+				push edx
+				mul esi
+				pop edx
+				mov esi, eax
+				mov ebp, 0
+				fillWest:
+					cmp ebp, maxwordlength
+					jae endfillWest
+					cmp byte ptr wordvocabulary[esi], 0
+					je endfillWest
+					cmp edx, 0
+					jl placeWest
+					mov al, puzzlegrid[edi]
+					cmp al, 0
+					je copythat
+					cmp al, wordvocabulary[esi]
+					je copythat
+					jmp placeWest
+					copythat:
+						mov ah, wordvocabulary[esi]
+						mov temp[ebp], ah
+						dec edi
+						inc esi
+						inc ebp
+						dec edx 
+						jmp fillWest
+				endfillWest:
+					push ecx
+					mov ecx, ebp
+					finalcopy:
+						inc edi
+						mov al, temp[ecx-1]
+						and al, 11011111b
+						mov puzzlegrid[edi], al
+					loop finalcopy
+					pop ecx
+				jmp placed
+			placeNorth:
+				mov eax, gridsize		
+				call generaterandom
+				mov ebx, eax			; row no
+				mov wordgridrowpos[ecx*4-4], ebx
+				mov eax, gridsize		
+				call generaterandom
+				mov edx, eax			; col no
+				mov wordgridcolpos[ecx*4-4], edx
+				cmp ebx, minwordlength
+				jb placeNorth
+				mov eax, ebx
+				mov ah, gridsize
+				mul ah
+				movzx edi, ax
+				add edi, edx
+				mov eax, selectedwordindex[ecx*4-4]
+				mov esi, maxwordlength
+				push edx
+				mul esi
+				pop edx
+				mov esi, eax
+				mov ebp, 0
+				fillNorth:
+					cmp ebp, maxwordlength
+					jae endfillNorth
+					cmp byte ptr wordvocabulary[esi], 0
+					je endfillNorth
+					cmp ebx, 0
+					jl placeNorth
+					mov al, puzzlegrid[edi]
+					cmp al, 0
+					je copythatN
+					cmp al, wordvocabulary[esi]
+					je copythatN
+					jmp placeNorth
+					copythatN:
+						mov ah, wordvocabulary[esi]
+						mov temp[ebp], ah
+						sub edi, gridsize
+						inc esi
+						inc ebp
+						dec ebx 
+						jmp fillNorth
+				endfillNorth:
+					push ecx
+					mov ecx, ebp
+					finalcopyN:
+						add edi, gridsize
+						mov al, temp[ecx-1]
+						and al, 11011111b
+						mov puzzlegrid[edi], al
+					loop finalcopyN
+					pop ecx
+				jmp placed
+			placeEast:
+				mov eax, gridsize		
+				call generaterandom
+				mov ebx, eax			; row no
+				mov wordgridrowpos[ecx*4-4], ebx
+				mov eax, gridsize		
+				call generaterandom
+				mov edx, eax			; col no
+				mov wordgridcolpos[ecx*4-4], edx
+				cmp edx, gridsize-minwordlength
+				ja placeEast
+				mov eax, ebx
+				mov ah, gridsize
+				mul ah
+				movzx edi, ax
+				add edi, edx
+				mov eax, selectedwordindex[ecx*4-4]
+				mov esi, maxwordlength
+				push edx
+				mul esi
+				pop edx
+				mov esi, eax
+				mov ebp, 0
+				fillEast:
+					cmp ebp, maxwordlength
+					jae endfillEast
+					cmp byte ptr wordvocabulary[esi], 0
+					je endfillEast
+					cmp edx, gridsize
+					jge placeEast
+					mov al, puzzlegrid[edi]
+					cmp al, 0
+					je copythatE
+					cmp al, wordvocabulary[esi]
+					je copythatE
+					jmp placeEast
+					copythatE:
+						mov ah, wordvocabulary[esi]
+						mov temp[ebp], ah
+						inc edi
+						inc esi
+						inc ebp
+						inc edx 
+						jmp fillEast
+				endfillEast:
+					push ecx
+					mov ecx, ebp
+					finalcopyE:
+						dec edi
+						mov al, temp[ecx-1]
+						and al, 11011111b
+						mov puzzlegrid[edi], al
+					loop finalcopyE
+					pop ecx
+				jmp placed
+			placeSouthEast:
+				mov eax, gridsize		
+				call generaterandom
+				mov ebx, eax			; row no
+				mov wordgridrowpos[ecx*4-4], ebx
+				mov eax, gridsize		
+				call generaterandom
+				mov edx, eax			; col no
+				mov wordgridcolpos[ecx*4-4], edx
+				cmp edx, gridsize-minwordlength
+				ja placeSouthEast
+				cmp ebx, gridsize-minwordlength
+				ja placeSouthEast
+				mov eax, ebx
+				mov ah, gridsize
+				mul ah
+				movzx edi, ax
+				add edi, edx
+				mov eax, selectedwordindex[ecx*4-4]
+				mov esi, maxwordlength
+				push edx
+				mul esi
+				pop edx
+				mov esi, eax
+				mov ebp, 0
+				fillSouthEast:
+					cmp ebp, maxwordlength
+					jae endfillSouthEast
+					cmp byte ptr wordvocabulary[esi], 0
+					je endfillSouthEast
+					cmp ebx, gridsize
+					jge placeSouthEast
+					cmp edx, gridsize
+					jge placeSouthEast
+					mov al, puzzlegrid[edi]
+					cmp al, 0
+					je copythatSE
+					cmp al, wordvocabulary[esi]
+					je copythatSE
+					jmp placeSouthEast
+					copythatSE:
+						mov ah, wordvocabulary[esi]
+						mov temp[ebp], ah
+						inc esi
+						inc ebp
+						inc ebx 
+						inc edx
+						add edi, gridsize+1
+						jmp fillSouthEast
+				endfillSouthEast:
+					push ecx
+					mov ecx, ebp
+					finalcopySE:
+						sub edi, gridsize+1
+						mov al, temp[ecx-1]
+						and al, 11011111b
+						mov puzzlegrid[edi], al
+					loop finalcopySE
+					pop ecx
+				jmp placed
+			placeSouth:
+				mov eax, gridsize		
+				call generaterandom
+				mov ebx, eax			; row no
+				mov wordgridrowpos[ecx*4-4], ebx
+				mov eax, gridsize		
+				call generaterandom
+				mov edx, eax			; col no
+				mov wordgridcolpos[ecx*4-4], edx
+				cmp ebx, gridsize-minwordlength
+				ja placeSouth
+				mov eax, ebx
+				mov ah, gridsize
+				mul ah
+				movzx edi, ax
+				add edi, edx
+				mov eax, selectedwordindex[ecx*4-4]
+				mov esi, maxwordlength
+				push edx
+				mul esi
+				pop edx
+				mov esi, eax
+				mov ebp, 0
+				fillSouth:
+					cmp ebp, maxwordlength
+					jae endfillSouth
+					cmp byte ptr wordvocabulary[esi], 0
+					je endfillSouth
+					cmp ebx, gridsize
+					jge placeSouth
+					mov al, puzzlegrid[edi]
+					cmp al, 0
+					je copythatS
+					cmp al, wordvocabulary[esi]
+					je copythatS
+					jmp placeSouth
+					copythatS:
+						mov ah, wordvocabulary[esi]
+						mov temp[ebp], ah
+						add edi, gridsize
+						inc esi
+						inc ebp
+						inc ebx 
+						jmp fillSouth
+				endfillSouth:
+					push ecx
+					mov ecx, ebp
+					finalcopyS:
+						sub edi, gridsize
+						mov al, temp[ecx-1]
+						and al, 11011111b
+						mov puzzlegrid[edi], al
+					loop finalcopyS
+					pop ecx
+				jmp placed
+			placeSouthWest:
+				mov eax, gridsize		
+				call generaterandom
+				mov ebx, eax			; row no
+				mov wordgridrowpos[ecx*4-4], ebx
+				mov eax, gridsize		
+				call generaterandom
+				mov edx, eax			; col no
+				mov wordgridcolpos[ecx*4-4], edx
+				cmp ebx, gridsize-minwordlength
+				ja placeSouthWest
+				cmp edx, minwordlength
+				jb placeSouthWest
+				mov eax, ebx
+				mov ah, gridsize
+				mul ah
+				movzx edi, ax
+				add edi, edx
+				mov eax, selectedwordindex[ecx*4-4]
+				mov esi, maxwordlength
+				push edx
+				mul esi
+				pop edx
+				mov esi, eax
+				mov ebp, 0
+				fillSouthWest:
+					cmp ebp, maxwordlength
+					jae endfillSouthWest
+					cmp byte ptr wordvocabulary[esi], 0
+					je endfillSouthWest
+					cmp ebx, gridsize
+					jge placeSouthWest
+					cmp edx, 0
+					jl placeSouthWest
+					mov al, puzzlegrid[edi]
+					cmp al, 0
+					je copythatSW
+					cmp al, wordvocabulary[esi]
+					je copythatSW
+					jmp placeSouthWest
+					copythatSW:
+						mov ah, wordvocabulary[esi]
+						mov temp[ebp], ah
+						inc esi
+						inc ebp
+						inc ebx 
+						dec edx
+						add edi, gridsize-1
+						jmp fillSouthWest
+				endfillSouthWest:
+					push ecx
+					mov ecx, ebp
+					finalcopySW:
+						sub edi, gridsize-1
+						mov al, temp[ecx-1]
+						and al, 11011111b
+						mov puzzlegrid[edi], al
+					loop finalcopySW
+					pop ecx
+				jmp placed
+			placed:
+	dec ecx
+	cmp ecx,0
+	jne PlaceWord
+
+;---------Adding random alphabets to fill in rest of the puzzle
+
+	call addRandomAlphabets
+
+;---------Noting the start time
+	invoke GetTimeFormatA,0800h,0,0,OFFSET timeFormat ,OFFSET sysTime, lengthof sysTime-1
+	invoke GetTickCount
+	mov starttime, eax
+
+AskforInput:
+
+;---------displaying puzzle title
+
+	invoke SetConsoleCursorPosition, outputhandle, 0
+	invoke WriteConsoleA, outputhandle, offset puzzletitle, lengthof puzzletitle-1, offset dummy, 0
+
+;---------displaying start time
+
+	invoke WriteConsoleA, outputhandle, offset timestartmsg, lengthof timestartmsg, offset dummy, 0
+	invoke WriteConsoleA, outputhandle, offset sysTime, lengthof sysTime-1, offset dummy, 0
+	invoke WriteConsoleA, outputhandle, offset newline, lengthof newline -1, offset dummy, 0
+
+
+;---------displaying puzzle words
+
+	call displayPuzzleWords
+
+;---------displaying puzzle
+
+	call displaypuzzle
+
+;---------Asking user for input
+	
+	invoke WriteConsoleA, outputhandle, offset inputmessage, lengthof inputmessage-1, offset dummy, 0
+	invoke WriteConsoleA, outputhandle, offset spaces, lengthof spaces, offset dummy, 0
+	invoke WriteConsoleA, outputhandle, offset backspaces, lengthof backspaces, offset dummy, 0
+
+	cmp countsuccess, 8
+	je allfound
+
+	invoke ReadConsoleA, inputhandle, offset inputword, lengthof inputword, offset dummy, 0
+	invoke GetTickCount
+	sub eax, starttime
+	cmp eax, 600000
+	jae timeout
+	mov esi, 0
+	mov bl, 0		; row no
+	mov dl, 0		; col no
+	cmp byte ptr inputword[esi], 0dh
+	je AskforInput
+	getWord:
+		cmp byte ptr inputword[esi], 20h
+		je getRow
+		mov bh, inputword[esi]
+		and bh, 11011111b
+		mov puzzword[esi], bh
+		inc esi
+	jmp getWord
+	getRow:
+		mov puzzword[esi], 0
+		inc esi
+		cmp byte ptr inputword[esi], 20h
+		je getCol
+		mov bh, inputword[esi]
+		sub bh, '0'
+		mov ah, 10
+		mov al, bl
+		mul ah
+		mov bl, al
+		add bl, bh
+	jmp getRow
+	getCol:
+	inc esi
+	cmp inputword[esi], 20h
+	je getdirection
+	mov bh, inputword[esi]
+		mov bh, inputword[esi]
+		sub bh, '0'
+		mov ah, 10
+		mov al, dl
+		mul ah
+		mov dl, al
+		add dl, bh
+	jmp getCol
+	getdirection:
+		inc esi
+		mov dh, inputword[esi]
+		sub dh, '0'
+	mov ecx, puzzlewords
+	CheckWord:
+			mov eax, selectedwordindex[ecx*4-4]
+			mov esi, maxwordlength
+			push edx
+			mul esi
+			pop edx
+			mov esi, eax
+			mov edi, offset wordvocabulary
+			add edi, esi
+
+			mov esi, offset puzzword
+			mov ebp, 0
+			checksingleword:
+				cmp ebp, 10
+				jae checknull
+				cmp byte ptr [edi], 0
+				je checknull
+				mov al, [esi]
+				cmp al, [edi]
+				jne checknext
+				inc esi
+				inc edi
+				inc ebp
+			jmp checksingleword
+				checknull:
+				cmp byte ptr [esi], 0
+				je checkrowcol
+			checknext:
+	loop CheckWord
+	wordnotfound:
+		sub score, 10
+		jmp AskforInput
+	checkrowcol:
+		dec bl
+		movzx eax, bl
+		cmp wordgridrowpos[ecx*4-4], eax
+		jne wordnotfound
+		dec dl
+		movzx eax, dl
+		cmp wordgridcolpos[ecx*4-4], eax
+		jne wordnotfound
+		movzx eax, dh
+		cmp worddirection[ecx*4-4], eax
+		jne wordnotfound
+		mov esi, offset puzzword
+		mov al, gridsize
+		mul bl
+		movzx bx, dl
+		add ax, bx
+		movzx eax, ax
+		cmp dh, 0
+		je highlightNorth
+		cmp dh, 1
+		je highlightEast
+		cmp dh, 2
+		je highlightSouthEast
+		cmp dh, 3
+		je highlightSouth
+		cmp dh, 4
+		je highlightSouthWest
+		highlightWest:
+			cmp byte ptr [esi], 0
+			je highlighted
+			mov puzzlegridforeground[eax], 0
+			mov puzzlegridbackground[eax], 7
+			dec eax
+			inc esi
+			jmp highlightWest
+		highlightNorth:
+			cmp byte ptr [esi], 0
+			je highlighted
+			mov puzzlegridforeground[eax], 0
+			mov puzzlegridbackground[eax], 7
+			sub eax, gridsize
+			inc esi
+			jmp highlightNorth
+		highlightEast:
+			cmp byte ptr [esi], 0
+			je highlighted
+			mov puzzlegridforeground[eax], 0
+			mov puzzlegridbackground[eax], 7
+			inc eax
+			inc esi
+			jmp highlightEast
+		highlightSouthEast:
+			cmp byte ptr [esi], 0
+			je highlighted
+			mov puzzlegridforeground[eax], 0
+			mov puzzlegridbackground[eax], 7
+			add eax, gridsize+1
+			inc esi
+			jmp highlightSouthEast
+		highlightSouth:
+			cmp byte ptr [esi], 0
+			je highlighted
+			mov puzzlegridforeground[eax], 0
+			mov puzzlegridbackground[eax], 7
+			add eax, gridsize
+			inc esi
+			jmp highlightSouth
+		highlightSouthWest:
+			cmp byte ptr [esi], 0
+			je highlighted
+			mov puzzlegridforeground[eax], 0
+			mov puzzlegridbackground[eax], 7
+			add eax, gridsize-1
+			inc esi
+			jmp highlightSouthWest
+	highlighted:
+		cmp puzzwordfound[ecx-1], 1
+		je skipscoreaddition
+		mov puzzwordfound[ecx-1], 1
+		add score, 10
+		inc countsuccess
+		skipscoreaddition:
+	jmp AskforInput
+	timeout:
+		invoke WriteConsoleA, outputhandle, offset timeoutmsg, lengthof timeoutmsg, offset dummy, 0
+		invoke WriteConsoleA, outputhandle, offset newline, lengthof newline-1, offset dummy, 0
+		jmp endofProg
+	allfound:
+		invoke WriteConsoleA, outputhandle, offset foundsuccess, lengthof foundsuccess, offset dummy, 0
+		invoke WriteConsoleA, outputhandle, offset newline, lengthof newline-1, offset dummy, 0
+;---------End of program	
+endofProg:
+	invoke ExitProcess, 0
+main endp
+
+
+
+; Generate a random number in the range [0, n-1] 
+; Expect one parameter that is 'n' in EAX
+; returns random number in EAX
+generaterandom proc uses ebx edx
+	 mov   ebx, eax		; maximum value
+	 mov   eax, 343FDh
+	 imul  seed
+	 add   eax, 269EC3h
+	 mov   seed, eax    ; save the seed for the next call
+	 ror   eax,8        ; rotate out the lowest digit
+	 mov   edx,0
+	 div   ebx			; divide by max value
+	 mov   eax, edx		; return the remainder
+	ret
+generaterandom endp
+
+
+displayPuzzle proc uses esi ecx edi ebx edx
+	mov esi, offset puzzlegrid
+	mov ecx, gridsize
+	mov edi, 0
+	OuterLoop:
+		push ecx
+		mov ecx, gridsize
+		InnerLoop:
+			push ecx
+			movzx ebx, puzzlegridbackground[edi] 
+			movzx edx, puzzlegridforeground[edi] 
+			call SetTextColor
+			invoke WriteConsoleA, outputhandle, esi , 1, offset dummy, 0		
+			mov ebx, 0 
+			mov edx, 7
+			call SetTextColor
+			invoke WriteConsoleA, outputhandle, offset space, lengthof space, offset dummy, 0		
+			pop ecx
+			inc esi
+			inc edi
+		loop InnerLoop
+		invoke WriteConsoleA, outputhandle, offset newline, lengthof newline-1, offset dummy, 0
+		pop ecx
+	loop OuterLoop
+ret
+displayPuzzle endp
+
+addRandomAlphabets proc uses esi ecx eax
+	mov esi, offset puzzlegrid
+	mov ecx, gridsize*gridsize
+	OuterLoop:
+		cmp byte ptr [esi], 0
+		jne skipit
+		mov eax, 26
+		call generateRandom
+		add eax, 65
+		mov [esi], al
+		skipit:
+			inc esi
+	loop OuterLoop
+ret
+addRandomAlphabets endp
+
+displayPuzzleWords proc uses eax ecx edx esi edi ebx ebp
+
+	invoke WriteConsoleA, outputhandle, offset puzzlewordmsg , lengthof puzzlewordmsg-1, offset dummy, 0		
+	call displayScore
+	mov ecx, puzzlewords
+	mov ebx, offset directionmsg
+	displayword:
+		mov eax, selectedwordindex[ecx*4-4]
+		mov esi, maxwordlength
+		mul esi
+		mov esi, eax
+		mov edi, offset wordvocabulary
+		add edi, esi
+		push ecx
+		push ebx
+		push edx
+		xor ebx, ebx
+		mov edx, 7
+		cmp puzzwordfound[ecx-1], 0
+		je donothighlight
+		mov ebx, 7
+		xor edx, edx
+		call SetTextColor
+		donothighlight:
+		invoke WriteConsoleA, outputhandle, edi , maxwordlength, offset dummy, 0		
+		xor ebx, ebx
+		mov edx, 7
+		call SetTextColor
+		pop edx
+		pop ebx
+		xor ebp, ebp
+		extractdirectionline:
+		cmp byte ptr [ebx+ebp], 13
+		je endextractline 
+		inc ebp
+		jmp extractdirectionline
+		endextractline:
+		inc ebp
+		inc ebp
+		invoke WriteConsoleA, outputhandle, ebx, ebp, offset dummy, 0
+		add ebx, ebp
+		pop ecx
+	loop displayword
+	invoke WriteConsoleA, outputhandle, offset newline, lengthof newline-1, offset dummy, 0
+ret
+displayPuzzleWords endp
+
+; Expect two arguments i.e foreground color (Edx) and background color (Ebx)
+SetTextColor proc 
+	pushad
+    shl   ebx,4
+    or    ebx, edx
+    invoke SetConsoleTextAttribute, outputhandle, ebx
+	popad
+    ret
+    
+SetTextColor endp
+
+displayScore proc uses eax ebx edx esi 
+mov ecx, 0
+mov eax, score
+cmp eax, 0
+jge itspostive
+mov ecx, 1
+neg eax
+itspostive:
+mov esi, 4
+mov bx, 10
+convert:
+	cwd
+	div bx
+	add dl, '0'
+	mov scorestr[esi], dl
+	cmp ax, 0
+	je converted
+	dec esi
+	jmp convert
+converted:
+	cmp ecx, 0
+	je nosign
+	dec esi
+	mov byte ptr scorestr[esi], '-'
+	nosign:
+		dec esi
+		cmp esi, 0
+		jl exitappendzeros
+		mov byte ptr scorestr[esi], 0
+	jmp nosign
+	exitappendzeros: 
+		mov ebx, 7 
+		mov edx, 0
+		call SetTextColor
+		invoke WriteConsoleA, outputhandle, offset scorestr , lengthof scorestr, offset dummy, 0		
+		mov ebx, 0 
+		mov edx, 7
+		call SetTextColor
+		invoke WriteConsoleA, outputhandle, offset newline , lengthof newline-1, offset dummy, 0		
+ret
+displayScore endp
+
+end main
